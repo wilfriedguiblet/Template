@@ -1,0 +1,25 @@
+# params.yaml
+# Pipeline Name — Parameter file
+# Pass to Nextflow with:  nextflow run main.nf -params-file params.yaml
+#
+# All paths can be absolute or relative to the launch directory.
+# Create one params_*.yaml per dataset and switch between them.
+
+# ── Required inputs ──────────────────────────────────────────────────────────
+expression:  "/path/to/counts.tsv"        # genes × samples count matrix
+sampleinfo:  "/path/to/metadata.csv"      # Sample_ID, AGE, tissue, ...
+prefix:      "my_study"                   # filename prefix for all outputs
+outdir:      "results"                    # output directory
+
+# ── Flow control ─────────────────────────────────────────────────────────────
+step:        "all"                        # all | stage_one | stage_two | stage_three
+
+# ── Stage 1 parameters ──────────────────────────────────────────────────────
+# param_a:   10
+# param_b:   0.5
+
+# ── Stage 2 parameters ──────────────────────────────────────────────────────
+# param_c:   "default_value"
+
+# ── Stage 3 parameters ──────────────────────────────────────────────────────
+# param_d:   true
