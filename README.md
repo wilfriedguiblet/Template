@@ -1,365 +1,172 @@
-# Pipeline Name
+# Nextflow Pipeline Template
 
-> One-sentence summary of what this pipeline does.
+A reusable three-stage DSL2 template for cohort-based analyses. Inputs are declared in a samplesheet, stage metadata travels with each sample, and optional run manifests checksum the declared inputs and final outputs.
 
-[![Nextflow](https://img.shields.io/badge/nextflow-%E2%89%A523.10-brightgreen.svg)](https://www.nextflow.io/)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+## Contents
 
----
-
-## Table of contents
-
-- [Overview](#overview)
-- [Pipeline diagram](#pipeline-diagram)
+- [Workflow](#workflow)
 - [Requirements](#requirements)
 - [Quick start](#quick-start)
+- [Samplesheet](#samplesheet)
 - [Parameters](#parameters)
-- [Input file formats](#input-file-formats)
-- [Outputs](#outputs)
+- [Stages and outputs](#stages-and-outputs)
 - [Execution profiles](#execution-profiles)
-- [Dataset configuration examples](#dataset-configuration-examples)
+- [Provenance and resume](#provenance-and-resume)
 - [Troubleshooting](#troubleshooting)
-- [Citation](#citation)
 
----
+## Workflow
 
-## Overview
-
-<!-- Describe the biological question and computational approach in 2-3 paragraphs.
-     Keep it accessible to wet-lab scientists who may not know Nextflow. -->
-
-This pipeline performs …
-
-### Stages
-
-| # | Stage | Description |
-|---|-------|-------------|
-| 1 | `STAGE_ONE` | Brief description of what this stage does |
-| 2 | `STAGE_TWO` | Brief description |
-| 3 | `STAGE_THREE` | Brief description |
-
----
-
-## Pipeline diagram
-
-```
- Input A ───────┐
- Input B ───────┼──► 1. STAGE_ONE ──► intermediate outputs
- Metadata ──────┘         │
-                          ▼
-                    2. STAGE_TWO ──► more outputs
-                          │
-                          ▼
-                    3. STAGE_THREE ──► final results
+```text
+samplesheet ──► optional GEO download ──► STAGE_ONE ──► STAGE_TWO ──► STAGE_THREE
+                     │                       │              │              │
+                     └───────────────────────┴──────────────┴──► manifest + reports
 ```
 
----
+Each row is one cohort or independent analysis unit. Its metadata map is passed through each stage, so fields such as `age_col`, `covariates`, `subset_values`, and project-specific labels remain attached to outputs. The example Python scripts are placeholders; replace their analysis logic and declared output contracts for a real project.
 
 ## Requirements
 
-### Software
+- Nextflow 26.04 or newer, with Java 17 or newer.
+- Python 3.10 and the packages in `requirements.txt` for local execution.
+- Optional: Docker or Apptainer/Singularity for containers; SLURM for cluster execution.
+- Optional GEO input: R 4.3 with Bioconductor `GEOquery` and `Biobase`, or the configured GEO container.
 
-| Tool | Version | Purpose |
-|------|---------|---------|
-| [Nextflow](https://www.nextflow.io/) | ≥ 23.10 | Workflow engine |
-| [Python](https://www.python.org/) | ≥ 3.9 | Analysis scripts |
-| Java | ≥ 11 | Required by Nextflow |
-
-### Python packages
-
-```
-numpy pandas scipy scikit-learn matplotlib seaborn
-```
-
-Install with:
-```bash
-pip install numpy pandas scipy scikit-learn matplotlib seaborn
-```
-
-### Optional
-
-- **Singularity** or **Docker** for containerized execution
-- **SLURM** for HPC cluster submission
-
----
-
-## Quick start
-
-### 1. Clone the repository
+Build the pinned Python image for containerized Python stages:
 
 ```bash
-git clone https://github.com/YOUR_ORG/YOUR_REPO.git
-cd YOUR_REPO
+docker build -t pipeline-template:1.0.0 .
 ```
 
-### 2. Edit `params.yaml`
+The GEO process uses the separately pinned Bioconductor image configured as `geo_container`.
 
-Point the input parameters at your data files. See
-[Parameters](#parameters) and [Dataset configuration examples](#dataset-configuration-examples).
+## Quick Start
 
-```yaml
-expression:  "/path/to/your/counts.tsv"
-sampleinfo:  "/path/to/your/metadata.csv"
-prefix:      "my_study"
-outdir:      "results"
-```
-
-### 3. Run
+The repository includes a small synthetic matrix and metadata file. Run from the repository root:
 
 ```bash
-# Local execution
+nextflow lint main.nf
+nextflow run main.nf -params-file params.yaml -profile test -stub
+# Optional GEO-branch test; uses a fake accession and does not access the network.
+nextflow run main.nf -params-file params.yaml --samplesheet samplesheet.geo-stub.csv --outdir /tmp/geo-stub -profile test -stub
+```
+
+For a real local run, install the Python requirements and omit `-stub`:
+
+```bash
+python3 -m pip install -r requirements.txt
 nextflow run main.nf -params-file params.yaml
-
-# SLURM cluster
-nextflow run main.nf -params-file params.yaml -profile slurm
-
-# Dry-run (no analysis scripts executed)
-nextflow run main.nf -params-file params.yaml -stub
 ```
 
-### 4. Resume after failure
-
-Nextflow caches completed tasks. If a step fails, fix the issue and re-run
-with `-resume` — only the failed and downstream tasks will re-execute:
+To run on SLURM:
 
 ```bash
-nextflow run main.nf -params-file params.yaml -resume
+sbatch run.sh params.yaml slurm
 ```
 
-### 5. Run a single stage
-
-Use `--step` to run only one part of the pipeline. Upstream outputs are read
-from disk if available, or auto-enabled if missing:
+The launcher accepts a params path, profile, then any additional Nextflow arguments. For example:
 
 ```bash
-# Run only stage 2
-nextflow run main.nf -params-file params.yaml --step stage_two
-
-# Run stages 2 and 3 together
-nextflow run main.nf -params-file params.yaml --step stage_two,stage_three
+sbatch run.sh params.yaml slurm --step stage_two -resume
 ```
 
----
+When submitting from a SLURM spool directory, `run.sh` resolves the repository from its own path or `SLURM_SUBMIT_DIR`; set `TEMPLATE_DIR` if neither identifies the checkout.
+
+## Samplesheet
+
+The default `samplesheet.csv` is:
+
+```csv
+cohort,prefix,expression,sampleinfo,geo_accession,geo_platform,age_col,covariates,subset_column,subset_values
+example,example,examples/counts.tsv,examples/metadata.csv,,,,,,
+```
+
+Required columns are `cohort` and either both `expression`/`sampleinfo` or `geo_accession`. `prefix` is optional and defaults to `cohort`; it must be unique and contain only letters, digits, dots, underscores, or hyphens. Local file paths are relative to the launch directory or absolute.
+
+| Column | Meaning |
+|---|---|
+| `cohort` | Required row identifier, also used in validation errors. |
+| `prefix` | Optional output-name prefix; defaults to `cohort`. |
+| `expression` | Local expression/count matrix, genes by samples. |
+| `sampleinfo` | Local CSV metadata with sample IDs in the first column. |
+| `geo_accession` | Optional GEO series accession. Used only when both local paths are blank. |
+| `geo_platform` | Optional GPL ID for a multi-platform GEO series; required when a series has multiple platforms. |
+| `age_col`, `covariates`, `subset_column`, `subset_values` | Optional metadata fields retained in the per-row metadata map. |
+
+`covariates` and fields ending in `_values` are split on `|` into lists. For example, `age|sex` becomes `['age', 'sex']`. Add additional columns freely; they are carried through as metadata.
+
+The GEO adapter downloads the normalized expression matrix and phenotype table available as a GEO Series Matrix. It does not download raw FASTQ files or perform raw-read processing. Choose `geo_platform` when GEO returns more than one platform. Review GEO processing and licensing terms before using downloaded data.
 
 ## Parameters
 
-### Required inputs
+`params.yaml` is the default run configuration. Make a separate params file for each dataset or execution site.
 
-| Parameter | Description |
-|-----------|-------------|
-| `expression` | Raw counts matrix — genes × samples (TSV or CSV, auto-detected) |
-| `sampleinfo` | Sample metadata CSV with columns: `Sample_ID`, `AGE`, plus grouping columns |
-| `prefix` | Study name used as filename prefix for all outputs |
+| Parameter | Default | Purpose |
+|---|---|---|
+| `samplesheet` | `samplesheet.csv` | Cohort/sample input table. |
+| `outdir` | `results` | Published analysis results and run reports. |
+| `step` | `all` | `all`, one stage, or a comma-separated stage list. |
+| `run_manifest` | `true` | Write input/output checksums and run metadata. |
+| `load_modules` | `false` | Load `R/4.3` and `python/3.10` in cluster tasks. |
+| `container` | `pipeline-template:1.0.0` | Python-stage image used by Docker/Apptainer profiles. |
+| `geo_container` | Bioconductor 3.18 image | Image for the optional GEO adapter. |
+| `max_memory`, `max_cpus`, `max_time` | `256 GB`, `64`, `72 h` | Hard resource ceilings. |
+| `slurm_account`, `slurm_partition` | `null`, `norm` | Optional SLURM account and partition. |
 
-### Optional inputs
+Boolean parameters accept true/false values and are validated before execution. The `step` parameter is also validated before stages are scheduled.
 
-| Parameter | Default | Description |
-|-----------|---------|-------------|
-| `outdir` | `"results"` | Root output directory |
-| `step` | `"all"` | Which stage(s) to run. Comma-separated list |
+## Stages and Outputs
 
-<!-- Add your pipeline-specific parameters here. Group them logically. -->
+`--step` selects stages to execute. If an upstream stage is omitted, its published output must already exist. For example, `--step stage_two` reads `results/stage_one/{prefix}_output.csv`; it does not silently rerun stage one. Stage two also requires the sample metadata path from the samplesheet.
 
-### Stage 1 parameters
-
-| Parameter | Default | Description |
-|-----------|---------|-------------|
-| `param_a` | `10` | Description of param_a |
-| `param_b` | `0.5` | Description of param_b |
-
-### Resource limits
-
-| Parameter | Default | Description |
-|-----------|---------|-------------|
-| `max_memory` | `"256.GB"` | Hard cap on memory per process |
-| `max_cpus` | `64` | Hard cap on CPUs per process |
-| `max_time` | `"72.h"` | Hard cap on wall time per process |
-
----
-
-## Input file formats
-
-### Expression matrix
-
-Tab-separated (`.tsv`) or comma-separated (`.csv`). Genes as rows, samples as
-columns. The first column is the gene identifier (symbols or Ensembl IDs). The
-pipeline auto-detects orientation and delimiter.
-
-```
-gene       sample_1   sample_2   sample_3
-BRCA1      152        87         203
-TP53       1041       998        1105
-...
-```
-
-### Sample metadata
-
-CSV with `Sample_ID` as the first column. Must include all samples present in
-the expression matrix. Additional columns (e.g. `AGE`, `tissue`, `disease`,
-`sex`) are used for grouping, visualization, and modeling.
-
-```csv
-Sample_ID,AGE,tissue,disease,sex
-sample_1,45,Liver,Healthy,male
-sample_2,62,Brain,Tumor,female
-sample_3,38,Liver,Healthy,female
-```
-
-> **Important:** `Sample_ID` values must match the column headers in the
-> expression matrix exactly (case-sensitive).
-
----
-
-## Outputs
-
-```
-results/{prefix}/
-├── stage_one/
-│   ├── {prefix}_output_a.csv
-│   └── {prefix}_output_b.csv
-├── stage_two/
-│   ├── {prefix}_results.csv
-│   └── {prefix}_plot.png
-├── stage_three/
-│   └── {prefix}_final.csv
+```text
+results/
+├── stage_one/{prefix}_output.csv
+├── stage_two/{prefix}_results.csv
+├── stage_three/{prefix}_final.csv
+├── geo_download/                       # only for GEO rows
 └── pipeline_info/
-    ├── execution_report_*.html       # Interactive resource usage report
-    ├── execution_timeline_*.html     # Task timeline
-    ├── execution_trace_*.tsv         # Per-task resource stats
-    └── pipeline_dag_*.svg            # Pipeline DAG visualization
+    ├── execution_report.html
+    ├── execution_timeline.html
+    ├── execution_trace.tsv
+    ├── pipeline_dag.dot
+    ├── run_manifest.json
+    ├── input_checksums.csv
+    ├── output_checksums.csv
+    └── software_versions.txt
 ```
 
-### Key output files
+Each executed stage also publishes a `*_versions.yml` or `*_versions.txt` file alongside its outputs. The manifest includes task version reports, SHA-256 checksums, the selected parameters, input files, and final result files.
 
-| File | Description |
-|------|-------------|
-| `*_output_a.csv` | Description |
-| `*_results.csv` | Description |
-| `*_plot.png` | Description |
+## Execution Profiles
 
----
+| Profile | Behavior |
+|---|---|
+| `local` / `standard` | Run on the current machine without containers. |
+| `slurm` | Submit tasks to the configured SLURM partition. |
+| `docker` | Run Python stages in `container`; GEO uses `geo_container`. |
+| `singularity` | Run with Apptainer/Singularity and automatically mounted paths. |
+| `test` | Apply small resource requests for smoke tests. |
 
-## Execution profiles
+Profiles can be combined, such as `-profile slurm,docker`. Set `load_modules: true` when cluster tasks need the configured R/Python environment modules. Adapt module names, queue, account, and resource ceilings in `nextflow.config` to the target cluster.
 
-Run with `-profile <name>` to select an execution environment. Profiles can be
-combined with commas (e.g. `-profile slurm,singularity`).
+## Provenance and Resume
 
-| Profile | Description |
-|---------|-------------|
-| `local` | Run on the current machine (default) |
-| `slurm` | Submit jobs to a SLURM cluster |
-| `singularity` | Use Singularity containers |
-| `docker` | Use Docker containers |
-| `test` | Small resource caps for CI / dry-runs |
+Each analysis process takes its Python script as an explicit Nextflow `path` input. Editing a script therefore changes the task hash and invalidates the affected cached task on the next `-resume` run. Keep all additional scripts, configuration files, and reference inputs that affect a process as declared inputs for the same reason.
 
-### SLURM submission
-
-To submit the Nextflow head process itself as a SLURM job, use the provided
-`run.sh`:
-
-```bash
-sbatch run.sh
-```
-
-Edit `run.sh` to change the params file, profile, or SLURM directives.
-
----
-
-## Dataset configuration examples
-
-### Example 1: Mouse multi-tissue aging
-
-```yaml
-expression:        "/path/to/mouse_counts.tsv"
-sampleinfo:        "/path/to/mouse_info.csv"
-prefix:            "mouse_aging"
-outdir:            "results"
-
-# All samples are healthy — no disease column
-group_col:         "tissue"
-healthy_label:     "all"
-color_by:          "tissue"
-
-# Mouse ages in months
-age_col:           "AGE"
-```
-
-### Example 2: Human cancer vs healthy
-
-```yaml
-expression:        "/path/to/human_counts.tsv"
-sampleinfo:        "/path/to/human_info.csv"
-prefix:            "cancer_study"
-outdir:            "results"
-
-group_col:         "disease"
-healthy_label:     "Healthy"
-color_by:          "disease"
-
-age_col:           "AGE"
-train_label:       "Healthy"     # train models on healthy, predict all
-```
-
-> **Tip:** Create one `params_*.yaml` per dataset and switch between them:
-> ```bash
-> nextflow run main.nf -params-file params_mouse.yaml -profile slurm
-> nextflow run main.nf -params-file params_human.yaml -profile slurm
-> ```
-
----
+The final manifest checksums the samplesheet, local data files, pipeline scripts/configuration, GEO-derived files when used, and final stage results. Use immutable container tags or digests for reproducible runs; rebuilding a mutable image tag can otherwise change the runtime without changing the params file.
 
 ## Troubleshooting
 
-### Common errors
+| Symptom | Check |
+|---|---|
+| Missing file before a stage | Confirm paths in the samplesheet are relative to the launch directory or absolute. |
+| Stage two/three cannot find an upstream file | Run the omitted upstream stage first, or correct `outdir` and the cohort prefix. |
+| GEO returns multiple platforms | Set `geo_platform` to one of the reported GPL identifiers. |
+| Exit 137 or another retryable resource failure | Raise the relevant label request and/or `max_memory`, `max_cpus`, or `max_time`. |
+| Task unexpectedly resumes cached output | Ensure scripts and other behavior-changing files are declared as process `path` inputs. |
 
-| Error | Cause | Fix |
-|-------|-------|-----|
-| `Process killed` (exit 137) | Out of memory | Increase `max_memory` or use `process_high` label |
-| `File not found` | Wrong path in params.yaml | Check paths; use absolute paths on clusters |
-| `No matching samples` | Sample IDs don't match between expression and sampleinfo | Ensure column headers in expression match `Sample_ID` in sampleinfo |
-
-### Checking logs
-
-```bash
-# View the Nextflow log
-cat .nextflow.log
-
-# View a specific task's output
-cat work/<hash>/<hash>/.command.log
-
-# List failed tasks
-nextflow log last -f name,status,exit | grep -v COMPLETED
-```
-
-### Resuming
-
-Always use `-resume` after fixing an error. Nextflow will skip completed tasks:
-
-```bash
-nextflow run main.nf -params-file params.yaml -resume
-```
-
-### Clean up work directory
-
-The `work/` directory can grow large. After a successful run:
-
-```bash
-nextflow clean -f       # Remove old cached runs
-rm -rf work/            # Remove all cached data (cannot resume after this)
-```
-
----
-
-## Citation
-
-If you use this pipeline, please cite:
-
-> Author et al. (2026). Pipeline Name: brief description.
-> *Journal Name*. DOI: [10.xxxx/xxxxx](https://doi.org/10.xxxx/xxxxx)
-
----
+Inspect `.nextflow.log`, the execution trace, or a task's `.command.log` under `work/`. After correcting a failure, rerun with `-resume`.
 
 ## License
 
-This project is licensed under the MIT License — see [LICENSE](LICENSE) for
-details.
+This project is licensed under the MIT License; see [LICENSE](LICENSE).

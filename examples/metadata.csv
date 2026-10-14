@@ -1,0 +1,4 @@
+Sample_ID,AGE,group
+sample_1,35,control
+sample_2,52,control
+sample_3,68,case

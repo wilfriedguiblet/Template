@@ -1,0 +1,2 @@
+cohort,prefix,expression,sampleinfo,geo_accession,geo_platform,age_col,covariates,subset_column,subset_values
+example,example,examples/counts.csv,examples/metadata.csv,,,,,,

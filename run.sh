@@ -1,26 +1,47 @@
-#!/bin/bash
-#SBATCH --job-name    pipeline
-#SBATCH --ntasks      1
-#SBATCH --cpus-per-task 4
-#SBATCH --partition   norm
-#SBATCH --time        24:00:00
-#SBATCH --mem         16g
+#!/usr/bin/env bash
+#SBATCH --job-name=pipeline
+#SBATCH --ntasks=1
+#SBATCH --cpus-per-task=4
+#SBATCH --partition=norm
+#SBATCH --time=24:00:00
+#SBATCH --mem=16g
 
-# ── Load required modules ─────────────────────────────────────────────────────
-module load nextflow python
+set -euo pipefail
 
-# ── Run the pipeline ──────────────────────────────────────────────────────────
-# Edit the params file and profile to match your setup.
-# Add -resume to skip completed tasks after a failure.
+resolve_pipeline_dir() {
+    local candidate
+    for candidate in \
+        "${TEMPLATE_DIR:-}" \
+        "$(cd "$(dirname "${BASH_SOURCE[0]}")" 2>/dev/null && pwd)" \
+        "${SLURM_SUBMIT_DIR:-}" \
+        "$(pwd)"
+    do
+        if [[ -n "${candidate}" && -f "${candidate}/main.nf" ]]; then
+            printf '%s\n' "${candidate}"
+            return 0
+        fi
+    done
+    echo "ERROR: cannot locate main.nf; submit from the project directory or set TEMPLATE_DIR" >&2
+    return 1
+}
 
-nextflow run main.nf -params-file params.yaml -profile slurm
+SCRIPT_DIR="$(resolve_pipeline_dir)"
+PARAMS_INPUT="${1:-${SCRIPT_DIR}/params.yaml}"
+PROFILE="${2:-slurm}"
+if [[ $# -gt 0 ]]; then shift; fi
+if [[ $# -gt 0 ]]; then shift; fi
 
-# ── Examples ──────────────────────────────────────────────────────────────────
-# Run a single stage:
-#   nextflow run main.nf -params-file params.yaml -profile slurm --step stage_two
-#
-# Resume after failure:
-#   nextflow run main.nf -params-file params.yaml -profile slurm -resume
-#
-# Use a different dataset:
-#   nextflow run main.nf -params-file params_dataset2.yaml -profile slurm
+PARAMS="$(cd "$(dirname "${PARAMS_INPUT}")" && pwd)/$(basename "${PARAMS_INPUT}")"
+[[ -f "${PARAMS}" ]] || { echo "ERROR: params file not found: ${PARAMS}" >&2; exit 1; }
+
+if command -v module >/dev/null 2>&1; then
+    module load nextflow/26.04
+    module load R/4.3
+    module load python/3.10
+fi
+command -v nextflow >/dev/null || { echo "ERROR: nextflow is not available" >&2; exit 1; }
+nextflow lint "${SCRIPT_DIR}/main.nf"
+mkdir -p "${SCRIPT_DIR}/reports"
+
+cd "${SCRIPT_DIR}"
+nextflow run main.nf -params-file "${PARAMS}" -profile "${PROFILE}" "$@" -resume
