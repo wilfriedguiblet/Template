@@ -26,7 +26,11 @@ def checksum(path):
 
 def write_checksums(path, files):
     with path.open("w", newline="", encoding="utf-8") as handle:
-        writer = csv.DictWriter(handle, fieldnames=["path", "bytes", "sha256"])
+        writer = csv.DictWriter(
+            handle,
+            fieldnames=["stage", "cohort", "kind", "path", "bytes", "sha256"],
+            extrasaction="ignore",
+        )
         writer.writeheader()
         writer.writerows(files)
 
@@ -34,9 +38,9 @@ def write_checksums(path, files):
 def parse_args():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--samplesheet", required=True, type=Path)
-    parser.add_argument("--input-paths-base64", required=True)
-    parser.add_argument("--result-files", nargs="+", required=True, type=Path)
+    parser.add_argument("--checksum-files", nargs="+", required=True, type=Path)
     parser.add_argument("--version-files", nargs="+", required=True, type=Path)
+    parser.add_argument("--source-files", nargs="+", required=True, type=Path)
     parser.add_argument("--parameters-base64", required=True)
     parser.add_argument("--outdir", type=Path, default=Path("."))
     return parser.parse_args()
@@ -45,19 +49,25 @@ def parse_args():
 def main():
     args = parse_args()
     args.outdir.mkdir(parents=True, exist_ok=True)
-    input_paths = {
-        Path(value).expanduser().resolve()
-        for value in decode_json(args.input_paths_base64)
-    }
-    input_paths.add(args.samplesheet.expanduser().resolve())
-    missing = sorted(str(path) for path in input_paths if not path.is_file())
+    required_paths = [args.samplesheet, *args.checksum_files, *args.version_files, *args.source_files]
+    missing = sorted(str(path) for path in required_paths if not path.is_file())
     if missing:
         raise FileNotFoundError("Provenance inputs are missing: " + ", ".join(missing))
 
-    input_checksums = [checksum(path) for path in sorted(input_paths, key=str)]
-    output_checksums = [checksum(path) for path in sorted(args.result_files, key=str)]
+    input_checksums = []
+    output_checksums = []
+    for path in args.checksum_files:
+        with path.open(newline="", encoding="utf-8") as handle:
+            for row in csv.DictReader(handle):
+                target = input_checksums if row["kind"] == "input" else output_checksums
+                target.append(row)
+    input_checksums.extend(
+        checksum(path) for path in [args.samplesheet, *args.source_files]
+    )
+    input_checksums.sort(key=lambda row: row["path"])
+    output_checksums.sort(key=lambda row: row["path"])
     version_records = {
-        path.name: path.read_text(encoding="utf-8")
+        path.as_posix(): path.read_text(encoding="utf-8")
         for path in sorted(args.version_files, key=str)
     }
     write_checksums(args.outdir / "input_checksums.csv", input_checksums)

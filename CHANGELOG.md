@@ -7,13 +7,15 @@ The format follows [Keep a Changelog](https://keepachangelog.com/).
 ## [Unreleased]
 
 ### Added
-- Samplesheet-driven cohort inputs with metadata propagation and optional GEO Series Matrix download
-- SHA-256 input/output checksums, run manifest, and task software-version reports
-- Pinned Python and GEO container defaults, SLURM module loading, resource caps, retries, and test profile
+- Samplesheet-driven cohort inputs with metadata propagation
+- Per-stage SHA-256 checksum/version sidecars and an optional aggregate run manifest
+- Pinned Python container, SLURM module loading, resource caps, retries, and test profile
 - Strict-parser DSL2 workflow callbacks and updated Nextflow launch script
 - Synthetic example data and a runnable stub smoke test
+- CCBR-style `conf/`, `assets/`, `modules/local/`, `subworkflows/local/`, `tests/`, and `docs/` layout without CLI packaging
 
 ### Changed
-- Stage selection now requires published upstream outputs when earlier stages are skipped
-- Output publication uses stage-level directories with cohort-specific filenames
-- README documents samplesheet fields, GEO limitations, provenance, profiles, and resume behavior
+- The core workflow is a straight-through DAG; Nextflow `-resume` replaces manual stage selection
+- Outputs are cohort-scoped, and independent runs use distinct output directories
+- GEO/download adapters are intentionally outside the core workflow
+- README documents samplesheet fields, provenance, profiles, resume behavior, and run isolation

@@ -36,12 +36,8 @@ PARAMS="$(cd "$(dirname "${PARAMS_INPUT}")" && pwd)/$(basename "${PARAMS_INPUT}"
 
 if command -v module >/dev/null 2>&1; then
     module load nextflow/26.04
-    module load R/4.3
-    module load python/3.10
 fi
 command -v nextflow >/dev/null || { echo "ERROR: nextflow is not available" >&2; exit 1; }
 nextflow lint "${SCRIPT_DIR}/main.nf"
-mkdir -p "${SCRIPT_DIR}/reports"
-
 cd "${SCRIPT_DIR}"
 nextflow run main.nf -params-file "${PARAMS}" -profile "${PROFILE}" "$@" -resume

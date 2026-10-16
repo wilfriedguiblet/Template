@@ -1,13 +1,11 @@
 # Run from the repository root with:
 # nextflow run main.nf -params-file params.yaml
 
-samplesheet: "samplesheet.csv"
-outdir: "results"
-step: "all"                   # all | stage_one | stage_two | stage_three | comma-separated stages
-run_manifest: true
-load_modules: false            # set true on clusters with a python/3.10 environment module
+samplesheet: "assets/samplesheet.csv"
+outdir: "results/example_run"
+run_manifest: false            # optional central manifest; task sidecars are always written
+load_modules: false             # set true on clusters with a python/3.10 environment module
 container: "pipeline-template:1.0.0"
-geo_container: "bioconductor/bioconductor_docker:RELEASE_3_18"
 
 # Resource ceilings applied to process requests.
 max_memory: "256 GB"

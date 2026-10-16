@@ -1,0 +1,2 @@
+cohort,prefix,expression,sampleinfo,age_col,covariates
+example,example,assets/counts.csv,assets/metadata.csv,AGE,AGE

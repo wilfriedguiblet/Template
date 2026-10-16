@@ -5,10 +5,10 @@ process BUILD_RUN_MANIFEST {
 
     input:
     path samplesheet
-    path result_files
-    path version_files
+    path checksum_files, stageAs: 'checksums/*'
+    path version_files, stageAs: 'versions/*'
+    path source_files, stageAs: 'source??/*'
     path script_file
-    val input_paths_base64
     val parameters_base64
 
     output:
@@ -18,13 +18,15 @@ process BUILD_RUN_MANIFEST {
     path 'software_versions.txt', emit: software_versions
 
     script:
-    def resultArgs = result_files.collect { result -> "\"${result}\"" }.join(' ')
+    def checksumArgs = checksum_files.collect { item -> "\"${item}\"" }.join(' ')
+    def versionArgs = version_files.collect { item -> "\"${item}\"" }.join(' ')
+    def sourceArgs = source_files.collect { item -> "\"${item}\"" }.join(' ')
     """
     python3 "${script_file}" \\
         --samplesheet "${samplesheet}" \\
-        --input-paths-base64 ${input_paths_base64} \\
-        --result-files ${resultArgs} \\
-        --version-files ${version_files.join(' ')} \\
+        --checksum-files ${checksumArgs} \\
+        --version-files ${versionArgs} \\
+        --source-files ${sourceArgs} \\
         --parameters-base64 ${parameters_base64} \\
         --outdir .
     """
