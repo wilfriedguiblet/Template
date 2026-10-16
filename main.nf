@@ -8,6 +8,7 @@
 include { ANALYSIS } from './subworkflows/local/analysis/main'
 include { BUILD_RUN_MANIFEST } from './modules/local/run_manifest/main'
 
+// Normalize booleans because CLI and YAML parameter values may arrive as strings.
 def boolParam(value, label) {
     if (value instanceof Boolean) return value
     def normalized = value?.toString()?.trim()?.toLowerCase()
@@ -31,6 +32,7 @@ workflow {
     def writeManifest = boolParam(params.run_manifest, 'run_manifest')
     def seenPrefixes = new HashSet()
 
+    // Keep project-specific columns in the metadata map as rows enter the workflow.
     ch_samples = channel.fromPath(samplesheet)
         .splitCsv(header: true)
         .ifEmpty { error "Samplesheet has a header but no data rows: ${samplesheet}" }
@@ -46,6 +48,7 @@ workflow {
             if (!seenPrefixes.add(prefix)) error "Samplesheet output prefix must be unique: '${prefix}'"
             def metadata = row.findAll { key, _value -> !(key in ['expression', 'sampleinfo']) }
             metadata.prefix = prefix
+            // Normalize list-like metadata once so every stage receives the same representation.
             ['covariates'].plus(metadata.keySet().findAll { key -> key.toString().endsWith('_values') })
                 .unique().each { field ->
                     def value = metadata[field]?.toString()?.trim()
@@ -70,6 +73,7 @@ workflow {
     ╚══════════════════════════════════════════════════════════════╝
     """.stripIndent()
 
+    // Explicit script inputs make code edits invalidate the affected cached tasks.
     ch_scripts = [
         file("${projectDir}/bin/stage_one.py"),
         file("${projectDir}/bin/stage_two.py"),
@@ -84,6 +88,7 @@ workflow {
         ch_scripts[3]
     )
 
+    // Stage sidecars stay local to each task unless aggregate provenance is requested.
     if (writeManifest) {
         def sourceFiles = [
             'main.nf', 'nextflow.config', 'params.yaml',
