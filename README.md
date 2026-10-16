@@ -1,6 +1,6 @@
 # Nextflow Pipeline Template
 
-A lightweight Nextflow DSL2 starting point for cohort-based analyses. A samplesheet defines the cohorts and their inputs; a local subworkflow runs three dependent stages for each cohort. Run it directly with Nextflow; no Python package or pipeline-specific CLI is required.
+A lightweight Nextflow DSL2 starting point for cohort-based analyses. A samplesheet defines the cohorts and their inputs; a local subworkflow runs three dependent stages for each cohort. Run it directly with Nextflow.
 
 ## Repository Layout
 
